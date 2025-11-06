@@ -70,9 +70,8 @@ PL_LIBAV_API enum pl_color_system pl_system_from_av(enum AVColorSpace spc)
     // Default to PQ as it's the more common scenario.
     case AVCOL_SPC_ICTCP:               return PL_COLOR_SYSTEM_BT_2100_PQ;
     case AVCOL_SPC_NB:                  return PL_COLOR_SYSTEM_UNKNOWN;
+    default:                            return PL_COLOR_SYSTEM_UNKNOWN;
     }
-
-    return PL_COLOR_SYSTEM_UNKNOWN;
 }
 
 PL_LIBAV_API enum AVColorSpace pl_system_to_av(enum pl_color_system sys)
@@ -138,9 +137,8 @@ PL_LIBAV_API enum pl_color_primaries pl_primaries_from_av(enum AVColorPrimaries 
     case AVCOL_PRI_SMPTE432:        return PL_COLOR_PRIM_DISPLAY_P3;
     case AVCOL_PRI_JEDEC_P22:       return PL_COLOR_PRIM_EBU_3213;
     case AVCOL_PRI_NB:              return PL_COLOR_PRIM_UNKNOWN;
+    default:                        return PL_COLOR_PRIM_UNKNOWN;
     }
-
-    return PL_COLOR_PRIM_UNKNOWN;
 }
 
 PL_LIBAV_API enum AVColorPrimaries pl_primaries_to_av(enum pl_color_primaries prim)
@@ -193,9 +191,8 @@ PL_LIBAV_API enum pl_color_transfer pl_transfer_from_av(enum AVColorTransferChar
     case AVCOL_TRC_SMPTE428:        return PL_COLOR_TRC_ST428;
     case AVCOL_TRC_ARIB_STD_B67:    return PL_COLOR_TRC_HLG;
     case AVCOL_TRC_NB:              return PL_COLOR_TRC_UNKNOWN;
+    default:                        return PL_COLOR_TRC_UNKNOWN;
     }
-
-    return PL_COLOR_TRC_UNKNOWN;
 }
 
 PL_LIBAV_API enum AVColorTransferCharacteristic pl_transfer_to_av(enum pl_color_transfer trc)
