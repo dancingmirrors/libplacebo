@@ -47,6 +47,11 @@
 // small slabs. (Default: 256 KB)
 #define MINIMUM_SLAB_SIZE (1LLU << 18)
 
+// Controls the minimum buffer size. The Vulkan spec requires buffer size to
+// be > 0, so we enforce a minimum of 1 byte to handle edge cases where size
+// calculations might result in 0 (e.g., with buggy validation layers).
+#define MINIMUM_BUFFER_SIZE 1
+
 // How long to wait before garbage collecting empty slabs. Slabs older than
 // this many invocations of `vk_malloc_garbage_collect` will be released.
 #define MAXIMUM_SLAB_AGE 32
@@ -427,7 +432,7 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
         // Vulkan spec requires buffer size to be > 0. Ensure we never
         // create a zero-sized buffer, which can happen with buggy validation
         // layers that incorrectly report maxBufferSize.
-        VkDeviceSize buf_size = slab->size > 0 ? slab->size : 1;
+        VkDeviceSize buf_size = slab->size > 0 ? slab->size : MINIMUM_BUFFER_SIZE;
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -826,8 +831,10 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
             .handleTypes = vk_handle_type,
         };
 
-        // Vulkan spec requires buffer size to be > 0
-        VkDeviceSize buf_size = shmem->size > 0 ? shmem->size : 1;
+        // Vulkan spec requires buffer size to be > 0. Ensure we never
+        // create a zero-sized buffer, which can happen with buggy validation
+        // layers that incorrectly report maxBufferSize.
+        VkDeviceSize buf_size = shmem->size > 0 ? shmem->size : MINIMUM_BUFFER_SIZE;
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
