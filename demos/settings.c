@@ -22,11 +22,12 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
         {"preset",  required_argument,  NULL, 'p'},
         {"hwdec",   no_argument,        NULL, 'H'},
         {"window",  required_argument,  NULL, 'w'},
+        {"debug",   no_argument,        NULL, 'd'},
         {0}
     };
 
     int option;
-    while ((option = getopt_long(argc, argv, "vqp:Hw:", long_options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "vqp:Hw:d", long_options, NULL)) != -1) {
         switch (option) {
             case 'v':
                 if (args->verbosity < PL_LOG_TRACE)
@@ -54,6 +55,9 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
             case 'w':
                 args->window_impl = optarg;
                 break;
+            case 'd':
+                args->debug = true;
+                break;
             case '?':
             default:
                 goto error;
@@ -76,13 +80,14 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
     return true;
 
 error:
-    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [--hwdec] [-w/--window <api>] <filename>\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [--hwdec] [-w/--window <api>] [-d/--debug] <filename>\n", argv[0]);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -v, --verbose   Increase verbosity\n");
     fprintf(stderr, "  -q, --quiet     Decrease verbosity\n");
     fprintf(stderr, "  -p, --preset    Set the rendering preset (default|fast|hq|highquality)\n");
     fprintf(stderr, "  -H, --hwdec     Enable hardware decoding\n");
     fprintf(stderr, "  -w, --window    Specify the windowing API\n");
+    fprintf(stderr, "  -d, --debug     Enable validation layers\n");
     return false;
 }
 

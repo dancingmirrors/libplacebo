@@ -702,6 +702,7 @@ int main(int argc, char *argv[])
         .width = par->width,
         .height = par->height,
         .forced_impl = state.args.window_impl,
+        .debug = state.args.debug,
     };
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {

@@ -260,7 +260,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
     uint32_t num;
     p->vk_inst = pl_vk_inst_create(log, pl_vk_inst_params(
         .get_proc_addr = get_vk_proc_addr,
-        .debug = DEBUG,
+        .debug = params->debug,
         .extensions = glfwGetRequiredInstanceExtensions(&num),
         .num_extensions = num,
     ));
@@ -303,7 +303,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 #ifdef USE_GL
     p->gl = pl_opengl_create(log, pl_opengl_params(
         .allow_software = true,
-        .debug = DEBUG,
+        .debug = params->debug,
 #ifdef HAVE_EGL
         .egl_display = glfwGetEGLDisplay(),
         .egl_context = glfwGetEGLContext(p->win),
@@ -332,7 +332,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 #endif // USE_GL
 
 #ifdef USE_D3D11
-    p->d3d11 = pl_d3d11_create(log, pl_d3d11_params( .debug = DEBUG ));
+    p->d3d11 = pl_d3d11_create(log, pl_d3d11_params( .debug = params->debug ));
     if (!p->d3d11) {
         fprintf(stderr, "libplacebo: Failed creating D3D11 device\n");
         goto error;
