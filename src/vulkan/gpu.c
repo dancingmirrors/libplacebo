@@ -489,37 +489,41 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     VkDeviceSize queried_max_buffer_size = 0;
 
 #ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES
+    bool queried_vk13 = false;
     VkPhysicalDeviceVulkan13Properties vk13_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
     };
 
+    // Prefer Vulkan13Properties for Vulkan 1.3+ devices
     if (vk->api_ver >= VK_API_VERSION_1_3) {
         vk_link_struct(&props, &vk13_props);
+        queried_vk13 = true;
         PL_DEBUG(vk, "Querying VkPhysicalDeviceVulkan13Properties for maxBufferSize");
     }
 #endif
 
-#if defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) && \
-    !defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES)
-    // Fallback to Maintenance4Properties if Vulkan13Properties is not available
+#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES
     VkPhysicalDeviceMaintenance4Properties maint4_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES,
     };
 
-    bool has_maint4 = vk->api_ver >= VK_API_VERSION_1_3;
-#ifdef VK_KHR_maintenance4
-    if (!has_maint4) {
-        for (int i = 0; i < vk->exts.num; i++) {
-            if (!strcmp(vk->exts.elem[i], VK_KHR_MAINTENANCE_4_EXTENSION_NAME)) {
-                has_maint4 = true;
-                break;
+    // Also try Maintenance4Properties as fallback or for older Vulkan versions
+    if (!queried_vk13) {
+        bool has_maint4 = vk->api_ver >= VK_API_VERSION_1_3;
+#ifdef VK_KHR_MAINTENANCE_4_EXTENSION_NAME
+        if (!has_maint4) {
+            for (int i = 0; i < vk->exts.num; i++) {
+                if (!strcmp(vk->exts.elem[i], VK_KHR_MAINTENANCE_4_EXTENSION_NAME)) {
+                    has_maint4 = true;
+                    break;
+                }
             }
         }
-    }
 #endif
-    if (has_maint4) {
-        vk_link_struct(&props, &maint4_props);
-        PL_DEBUG(vk, "Querying VkPhysicalDeviceMaintenance4Properties for maxBufferSize");
+        if (has_maint4) {
+            vk_link_struct(&props, &maint4_props);
+            PL_DEBUG(vk, "Querying VkPhysicalDeviceMaintenance4Properties for maxBufferSize");
+        }
     }
 #endif
 
@@ -528,16 +532,15 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 
     // Extract maxBufferSize from the appropriate structure
 #ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES
-    if (vk->api_ver >= VK_API_VERSION_1_3) {
+    if (queried_vk13) {
         queried_max_buffer_size = vk13_props.maxBufferSize;
         PL_DEBUG(vk, "VkPhysicalDeviceVulkan13Properties::maxBufferSize = %zu",
                  (size_t) queried_max_buffer_size);
     }
 #endif
 
-#if defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) && \
-    !defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES)
-    if (queried_max_buffer_size == 0) {
+#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES
+    if (queried_max_buffer_size == 0 && !queried_vk13) {
         queried_max_buffer_size = maint4_props.maxBufferSize;
         PL_DEBUG(vk, "VkPhysicalDeviceMaintenance4Properties::maxBufferSize = %zu",
                  (size_t) queried_max_buffer_size);
