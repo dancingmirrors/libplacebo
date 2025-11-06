@@ -253,7 +253,6 @@ lib = library('placebo', sources,
   link_args: link_args,
   link_depends: link_depends,
   gnu_symbol_visibility: 'hidden',
-  name_prefix: 'lib'
 )
 
 libplacebo = declare_dependency(
