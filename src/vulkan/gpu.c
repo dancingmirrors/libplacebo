@@ -555,7 +555,7 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
         PL_DEBUG(vk, "Using maxBufferSize: %zu", (size_t) vk->max_buffer_size);
     } else {
         vk->max_buffer_size = UINT64_MAX;
-        PL_WARN(vk, "Driver reported maxBufferSize=0, using UINT64_MAX as fallback");
+        PL_DEBUG(vk, "Driver reported maxBufferSize=0, using UINT64_MAX as fallback");
     }
 
     // Determine GLSL features and limits
