@@ -107,7 +107,7 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
 
     p->vk_inst = pl_vk_inst_create(log, pl_vk_inst_params(
         .get_proc_addr = SDL_Vulkan_GetVkGetInstanceProcAddr(),
-        .debug = DEBUG,
+        .debug = params->debug,
         .extensions = exts,
         .num_extensions = num,
     ));
@@ -157,7 +157,7 @@ static struct window *sdl_create(pl_log log, const struct window_params *params)
 
     p->gl = pl_opengl_create(log, pl_opengl_params(
         .allow_software = true,
-        .debug = DEBUG,
+        .debug = params->debug,
         .make_current = make_current,
         .release_current = release_current,
         .get_proc_addr = (void *) SDL_GL_GetProcAddress,

@@ -31,6 +31,7 @@ struct plplay_args {
     const char *window_impl;
     const char *filename;
     bool hwdec;
+    bool debug;
 };
 
 bool parse_args(struct plplay_args *args, int argc, char *argv[]);

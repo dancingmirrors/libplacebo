@@ -19,6 +19,7 @@ struct window_params {
     // initial color space
     struct pl_swapchain_colors colors;
     bool alpha;
+    bool debug;
 };
 
 struct window *window_create(pl_log log, const struct window_params *params);
