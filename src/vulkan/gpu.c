@@ -484,12 +484,28 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     if (vk->CopyMemoryToImageEXT)
         vk_link_struct(&props, &copy_props);
 
-#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES
+    // Query maxBufferSize from Vulkan 1.3 properties or Maintenance4 extension
+    // hasvk driver expects VkPhysicalDeviceVulkan13Properties for Vulkan 1.3
+    VkDeviceSize queried_max_buffer_size = 0;
+
+#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES
+    VkPhysicalDeviceVulkan13Properties vk13_props = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
+    };
+
+    if (vk->api_ver >= VK_API_VERSION_1_3) {
+        vk_link_struct(&props, &vk13_props);
+        PL_DEBUG(vk, "Querying VkPhysicalDeviceVulkan13Properties for maxBufferSize");
+    }
+#endif
+
+#if defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) && \
+    !defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES)
+    // Fallback to Maintenance4Properties if Vulkan13Properties is not available
     VkPhysicalDeviceMaintenance4Properties maint4_props = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES,
     };
 
-    // Query Maintenance4 properties if we have Vulkan 1.3 or the extension
     bool has_maint4 = vk->api_ver >= VK_API_VERSION_1_3;
 #ifdef VK_KHR_maintenance4
     if (!has_maint4) {
@@ -503,23 +519,41 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
 #endif
     if (has_maint4) {
         vk_link_struct(&props, &maint4_props);
+        PL_DEBUG(vk, "Querying VkPhysicalDeviceMaintenance4Properties for maxBufferSize");
     }
 #endif
 
     vk->GetPhysicalDeviceProperties2(vk->physd, &props);
     VkPhysicalDeviceLimits limits = props.properties.limits;
 
-#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES
+    // Extract maxBufferSize from the appropriate structure
+#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES
+    if (vk->api_ver >= VK_API_VERSION_1_3) {
+        queried_max_buffer_size = vk13_props.maxBufferSize;
+        PL_DEBUG(vk, "VkPhysicalDeviceVulkan13Properties::maxBufferSize = %zu",
+                 (size_t) queried_max_buffer_size);
+    }
+#endif
+
+#if defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES) && \
+    !defined(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES)
+    if (queried_max_buffer_size == 0) {
+        queried_max_buffer_size = maint4_props.maxBufferSize;
+        PL_DEBUG(vk, "VkPhysicalDeviceMaintenance4Properties::maxBufferSize = %zu",
+                 (size_t) queried_max_buffer_size);
+    }
+#endif
+
     // Store maxBufferSize, using fallback if it's 0 (buggy drivers like hasvk)
     // When maxBufferSize is 0, it means the driver didn't properly implement
-    // Maintenance4 queries, so we use UINT64_MAX to effectively disable the limit
-    vk->max_buffer_size = maint4_props.maxBufferSize > 0
-                          ? maint4_props.maxBufferSize
-                          : UINT64_MAX;
-#else
-    // If Maintenance4 is not available, don't enforce any buffer size limit
-    vk->max_buffer_size = UINT64_MAX;
-#endif
+    // Maintenance4/Vulkan13 queries, so we use UINT64_MAX to effectively disable the limit
+    if (queried_max_buffer_size > 0) {
+        vk->max_buffer_size = queried_max_buffer_size;
+        PL_DEBUG(vk, "Using maxBufferSize: %zu", (size_t) vk->max_buffer_size);
+    } else {
+        vk->max_buffer_size = UINT64_MAX;
+        PL_WARN(vk, "Driver reported maxBufferSize=0, using UINT64_MAX as fallback");
+    }
 
     // Determine GLSL features and limits
     gpu->glsl = (struct pl_glsl_version) {
