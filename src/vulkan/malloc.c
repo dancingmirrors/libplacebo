@@ -429,10 +429,14 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
             .handleTypes = ext_info.handleTypes,
         };
 
-        // Vulkan spec requires buffer size to be > 0. Ensure we never
-        // create a zero-sized buffer, which can happen with buggy validation
-        // layers that incorrectly report maxBufferSize.
-        VkDeviceSize buf_size = slab->size > 0 ? slab->size : MINIMUM_BUFFER_SIZE;
+        // Ensure buffer size is valid: must be > 0 and <= max_buffer_size.
+        // Clamp to max_buffer_size to work around buggy drivers (e.g., hasvk)
+        // that incorrectly report maxBufferSize=0 in validation layers.
+        VkDeviceSize buf_size = slab->size;
+        if (buf_size == 0)
+            buf_size = MINIMUM_BUFFER_SIZE;
+        if (vk->max_buffer_size > 0 && buf_size > vk->max_buffer_size)
+            buf_size = vk->max_buffer_size;
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -831,10 +835,14 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
             .handleTypes = vk_handle_type,
         };
 
-        // Vulkan spec requires buffer size to be > 0. Ensure we never
-        // create a zero-sized buffer, which can happen with buggy validation
-        // layers that incorrectly report maxBufferSize.
-        VkDeviceSize buf_size = shmem->size > 0 ? shmem->size : MINIMUM_BUFFER_SIZE;
+        // Ensure buffer size is valid: must be > 0 and <= max_buffer_size.
+        // Clamp to max_buffer_size to work around buggy drivers (e.g., hasvk)
+        // that incorrectly report maxBufferSize=0 in validation layers.
+        VkDeviceSize buf_size = shmem->size;
+        if (buf_size == 0)
+            buf_size = MINIMUM_BUFFER_SIZE;
+        if (vk->max_buffer_size > 0 && buf_size > vk->max_buffer_size)
+            buf_size = vk->max_buffer_size;
 
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
