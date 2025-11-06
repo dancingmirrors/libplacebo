@@ -49,12 +49,6 @@
 #define strdup _strdup
 #endif
 
-#ifdef NDEBUG
-#define DEBUG false
-#else
-#define DEBUG true
-#endif
-
 #define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))
 
 const struct window_impl IMPL;

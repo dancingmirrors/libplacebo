@@ -27,12 +27,6 @@
 #define IMPL_TAG "sdl2-gl"
 #endif
 
-#ifdef NDEBUG
-#define DEBUG false
-#else
-#define DEBUG true
-#endif
-
 const struct window_impl IMPL;
 
 struct priv {
