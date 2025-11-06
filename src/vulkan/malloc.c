@@ -424,10 +424,15 @@ static struct vk_slab *slab_alloc(struct vk_malloc *ma,
             .handleTypes = ext_info.handleTypes,
         };
 
+        // Vulkan spec requires buffer size to be > 0. Ensure we never
+        // create a zero-sized buffer, which can happen with buggy validation
+        // layers that incorrectly report maxBufferSize.
+        VkDeviceSize buf_size = slab->size > 0 ? slab->size : 1;
+
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = slab->handle_type ? &ext_buf_info : NULL,
-            .size  = slab->size,
+            .size  = buf_size,
             .usage = params->buf_usage,
             .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
@@ -821,10 +826,13 @@ static bool vk_malloc_import(struct vk_malloc *ma, struct vk_memslice *out,
             .handleTypes = vk_handle_type,
         };
 
+        // Vulkan spec requires buffer size to be > 0
+        VkDeviceSize buf_size = shmem->size > 0 ? shmem->size : 1;
+
         VkBufferCreateInfo binfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = &ext_buf_info,
-            .size = shmem->size,
+            .size = buf_size,
             .usage = params->buf_usage,
             .sharingMode = vk->pools.num > 1 ? VK_SHARING_MODE_CONCURRENT
                                              : VK_SHARING_MODE_EXCLUSIVE,
