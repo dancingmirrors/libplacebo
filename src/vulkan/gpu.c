@@ -490,7 +490,18 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     };
 
     // Query Maintenance4 properties if we have Vulkan 1.3 or the extension
-    if (vk->api_ver >= VK_API_VERSION_1_3) {
+    bool has_maint4 = vk->api_ver >= VK_API_VERSION_1_3;
+#ifdef VK_KHR_maintenance4
+    if (!has_maint4) {
+        for (int i = 0; i < vk->exts.num; i++) {
+            if (!strcmp(vk->exts.elem[i], VK_KHR_MAINTENANCE_4_EXTENSION_NAME)) {
+                has_maint4 = true;
+                break;
+            }
+        }
+    }
+#endif
+    if (has_maint4) {
         vk_link_struct(&props, &maint4_props);
     }
 #endif
@@ -502,9 +513,9 @@ pl_gpu pl_gpu_create_vk(struct vk_ctx *vk)
     // Store maxBufferSize, using fallback if it's 0 (buggy drivers like hasvk)
     // When maxBufferSize is 0, it means the driver didn't properly implement
     // Maintenance4 queries, so we use UINT64_MAX to effectively disable the limit
-    vk->max_buffer_size = maint4_props.maxBufferSize > 0 
-        ? maint4_props.maxBufferSize 
-        : UINT64_MAX;
+    vk->max_buffer_size = maint4_props.maxBufferSize > 0
+                          ? maint4_props.maxBufferSize
+                          : UINT64_MAX;
 #else
     // If Maintenance4 is not available, don't enforce any buffer size limit
     vk->max_buffer_size = UINT64_MAX;
