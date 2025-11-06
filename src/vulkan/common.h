@@ -67,6 +67,7 @@ struct vk_ctx {
     VkPhysicalDeviceProperties props;
     VkPhysicalDeviceFeatures2 features;
     uint32_t api_ver; // device API version
+    VkDeviceSize max_buffer_size; // VkPhysicalDeviceMaintenance4Properties::maxBufferSize
     VkDevice dev;
     bool imported; // device was not created by us
 
