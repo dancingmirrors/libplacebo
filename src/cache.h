@@ -48,11 +48,15 @@ static inline void pl_cache_obj_resize(void *alloc, pl_cache_obj *obj, size_t si
     if (obj->free != pl_free) {
         if (obj->free)
             obj->free(obj->data);
-        obj->data = pl_alloc(alloc, size);
+        obj->data = pl_zalloc(alloc, size);
         obj->free = pl_free;
     } else if (pl_get_size(obj->data) < size) {
+        size_t old_size = pl_get_size(obj->data);
         obj->data = pl_steal(alloc, obj->data);
         obj->data = pl_realloc(alloc, obj->data, size);
+        // Zero any newly allocated bytes to avoid uninitialized memory
+        if (size > old_size)
+            memset((char *)obj->data + old_size, 0, size - old_size);
     }
     obj->size = size;
 }
