@@ -518,6 +518,15 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
             PL_ARRAY(uint64_t) modlist = {0};
 
+            // Check if format is actually supported before querying DRM modifiers
+            // to avoid crashes in drivers that assert on unsupported formats
+            if (prop->linearTilingFeatures == 0 &&
+                prop->optimalTilingFeatures == 0 &&
+                prop->bufferFeatures == 0) {
+                // Format not supported, skip DRM modifier query
+                goto skip_drm_mods;
+            }
+
             // Query the list of supported DRM modifiers from the driver
             VkDrmFormatModifierPropertiesList2EXT drm_props =
                 get_drm_mods_v2(vk, vk_fmt->tfmt);
@@ -559,6 +568,7 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             fmt->num_modifiers = modlist.num;
             fmt->modifiers = modlist.elem;
 
+skip_drm_mods:
         } else if (gpu->export_caps.tex & PL_HANDLE_DMA_BUF) {
 
             // Hard-code a list of static mods that we're likely to support
