@@ -438,6 +438,9 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
     // Texture format emulation requires at least support for texel buffers
     bool has_emu = gpu->glsl.compute && gpu->limits.max_buffer_texels;
 
+    const VkPhysicalDeviceVulkan14Features *features_vk14 =
+        vk_find_struct(&vk->features, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES);
+
     for (const struct vk_format *pvk_fmt = vk_formats; pvk_fmt->tfmt; pvk_fmt++) {
         const struct vk_format *vk_fmt = pvk_fmt;
 
@@ -515,6 +518,16 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
             PL_ARRAY(uint64_t) modlist = {0};
 
+            // Check if format is actually supported before querying DRM modifiers
+            // to avoid crashes in drivers that assert on unsupported formats
+            VkFormatFeatureFlags2 all_linear = prop->linearTilingFeatures | prop3.linearTilingFeatures;
+            VkFormatFeatureFlags2 all_optimal = prop->optimalTilingFeatures | prop3.optimalTilingFeatures;
+            VkFormatFeatureFlags2 all_buffer = prop->bufferFeatures | prop3.bufferFeatures;
+            if (all_linear == 0 && all_optimal == 0 && all_buffer == 0) {
+                // Format not supported, skip DRM modifier query
+                goto skip_drm_mods;
+            }
+
             // Query the list of supported DRM modifiers from the driver
             VkDrmFormatModifierPropertiesList2EXT drm_props =
                 get_drm_mods_v2(vk, vk_fmt->tfmt);
@@ -556,6 +569,7 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
             fmt->num_modifiers = modlist.num;
             fmt->modifiers = modlist.elem;
 
+skip_drm_mods:
         } else if (gpu->export_caps.tex & PL_HANDLE_DMA_BUF) {
 
             // Hard-code a list of static mods that we're likely to support
@@ -605,7 +619,8 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
         // Internal capabilities
         if (vk->props.vendorID != VK_VENDOR_ID_NVIDIA &&
             vk->props.vendorID != VK_VENDOR_ID_APPLE) { // FIXME: remove when upstream works
-            if (texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT)
+            if ((texflags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) &&
+                features_vk14 && features_vk14->hostImageCopy)
                 fmtp->can_host_copy = true;
         }
 
