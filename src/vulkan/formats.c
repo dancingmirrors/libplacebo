@@ -520,9 +520,10 @@ void vk_setup_formats(struct pl_gpu_t *gpu)
 
             // Check if format is actually supported before querying DRM modifiers
             // to avoid crashes in drivers that assert on unsupported formats
-            if (prop->linearTilingFeatures == 0 &&
-                prop->optimalTilingFeatures == 0 &&
-                prop->bufferFeatures == 0) {
+            VkFormatFeatureFlags2 all_linear = prop->linearTilingFeatures | prop3.linearTilingFeatures;
+            VkFormatFeatureFlags2 all_optimal = prop->optimalTilingFeatures | prop3.optimalTilingFeatures;
+            VkFormatFeatureFlags2 all_buffer = prop->bufferFeatures | prop3.bufferFeatures;
+            if (all_linear == 0 && all_optimal == 0 && all_buffer == 0) {
                 // Format not supported, skip DRM modifier query
                 goto skip_drm_mods;
             }
