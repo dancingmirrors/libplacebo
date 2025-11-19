@@ -193,7 +193,15 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     vk_ctx->phys_dev = vk->phys_device;
     vk_ctx->act_dev = vk->device;
 
+    // Copy enabled device extensions from libplacebo to FFmpeg
+    // This is critical for video decode/encode extensions
+    vk_ctx->enabled_dev_extensions = vk->extensions;
+    vk_ctx->nb_enabled_dev_extensions = vk->num_extensions;
+
     // Set up queue families - use the ones from libplacebo
+    // Note: These fields are deprecated in newer FFmpeg but still required for older versions
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     vk_ctx->queue_family_index = vk->queue_graphics.index;
     vk_ctx->nb_graphics_queues = vk->queue_graphics.count;
     vk_ctx->queue_family_tx_index = vk->queue_transfer.index;
@@ -206,6 +214,7 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     vk_ctx->nb_encode_queues = 0;
     vk_ctx->queue_family_decode_index = -1;
     vk_ctx->nb_decode_queues = 0;
+#pragma GCC diagnostic pop
 
     // Use wrapper functions for queue locking
     vk_ctx->lock_queue = vk_lock_queue_wrapper;
