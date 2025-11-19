@@ -269,6 +269,10 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
         tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
     tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
 
+    PL_TRACE(gpu, "Creating texture: format=%s, num_planes=%d, aspect=0x%x, import=%d",
+             fmt->name, fmt->num_planes, (unsigned) tex_vk->aspect,
+             params->import_handle != 0);
+
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
     case 2: tex_vk->type = VK_IMAGE_TYPE_2D; break;
@@ -1336,6 +1340,10 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
             tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
         tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
     }
+
+    PL_TRACE(gpu, "Wrapped image %s: format=%s, num_planes=%d, aspect=0x%x",
+             params->debug_tag ? params->debug_tag : "(unknown)",
+             fmt->name, fmt->num_planes, (unsigned) tex_vk->aspect);
 
     // Blitting to planar images requires fallback via compute shaders
     if (tex_vk->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
