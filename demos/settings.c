@@ -20,7 +20,7 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
         {"verbose", no_argument,        NULL, 'v'},
         {"quiet",   no_argument,        NULL, 'q'},
         {"preset",  required_argument,  NULL, 'p'},
-        {"hwdec",   no_argument,        NULL, 'H'},
+        {"hwdec",   optional_argument,  NULL, 'H'},
         {"window",  required_argument,  NULL, 'w'},
         {"debug",   no_argument,        NULL, 'd'},
         {"color",   no_argument,        NULL, 'c'},
@@ -28,7 +28,7 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
     };
 
     int option;
-    while ((option = getopt_long(argc, argv, "vqp:Hw:dc", long_options, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "vqp:H::w:dc", long_options, NULL)) != -1) {
         switch (option) {
             case 'v':
                 if (args->verbosity < PL_LOG_TRACE)
@@ -51,7 +51,7 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
                 }
                 break;
             case 'H':
-                args->hwdec = true;
+                args->hwdec = optarg ? optarg : "";
                 break;
             case 'w':
                 args->window_impl = optarg;
@@ -84,15 +84,18 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
     return true;
 
 error:
-    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [--hwdec] [-w/--window <api>] [-d/--debug] [-c/--color] <filename>\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [-H[type]/--hwdec[=type]] [-w/--window <api>] [-d/--debug] [-c/--color] <filename>\n", argv[0]);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -v, --verbose   Increase verbosity\n");
-    fprintf(stderr, "  -q, --quiet     Decrease verbosity\n");
-    fprintf(stderr, "  -p, --preset    Set the rendering preset (default|fast|hq|highquality)\n");
-    fprintf(stderr, "  -H, --hwdec     Enable hardware decoding\n");
-    fprintf(stderr, "  -w, --window    Specify the windowing API\n");
-    fprintf(stderr, "  -d, --debug     Enable validation layers\n");
-    fprintf(stderr, "  -c, --color     Enable colored output (default: off)\n");
+    fprintf(stderr, "  -v, --verbose        Increase verbosity\n");
+    fprintf(stderr, "  -q, --quiet          Decrease verbosity\n");
+    fprintf(stderr, "  -p, --preset         Set the rendering preset (default|fast|hq|highquality)\n");
+    fprintf(stderr, "  -H[type], --hwdec[=type]  Enable hardware decoding\n");
+    fprintf(stderr, "                       Optional type: vulkan, vaapi, cuda, etc.\n");
+    fprintf(stderr, "                       Use -Hvulkan or --hwdec=vulkan (no space for short form)\n");
+    fprintf(stderr, "                       Note: vaapi recommended for Intel/AMD, vulkan may conflict\n");
+    fprintf(stderr, "  -w, --window         Specify the windowing API\n");
+    fprintf(stderr, "  -d, --debug          Enable validation layers\n");
+    fprintf(stderr, "  -c, --color          Enable colored output (default: off)\n");
     return false;
 }
 
