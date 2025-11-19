@@ -9,6 +9,7 @@
 
 #include <libavutil/cpu.h>
 #include <libavutil/hwcontext.h>
+#include <libavutil/error.h>
 
 #include "common.h"
 #include "window.h"
@@ -202,18 +203,28 @@ static bool init_codec(struct plplay *p)
                 hwcfg->device_type != requested_type)
                 continue;
 
+            const char *device_name = av_hwdevice_get_type_name(hwcfg->device_type);
+            printf("Attempting to create %s hardware device context...\n", device_name);
+            
+            // Warn about known Vulkan issues
+            if (hwcfg->device_type == av_hwdevice_find_type_by_name("vulkan")) {
+                fprintf(stderr, "Warning: Vulkan hwdec may conflict with libplacebo's Vulkan context.\n");
+                fprintf(stderr, "If this hangs, try: -Hvaapi (for Intel/AMD) or software decoding.\n");
+                fprintf(stderr, "See VULKAN_HWDEC_TROUBLESHOOTING.md for more information.\n");
+            }
+            
             int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
                                             hwcfg->device_type,
                                             NULL, NULL, 0);
             if (ret < 0) {
-                fprintf(stderr, "libavcodec: Failed opening HW device context for %s, skipping\n",
-                        av_hwdevice_get_type_name(hwcfg->device_type));
+                fprintf(stderr, "libavcodec: Failed opening HW device context for %s: %s\n",
+                        device_name, av_err2str(ret));
                 continue;
             }
 
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
-            printf("Using hardware decoder: %s (%s)\n", 
-                   av_hwdevice_get_type_name(hwcfg->device_type), desc->name);
+            printf("Successfully created hardware decoder: %s (%s)\n", 
+                   device_name, desc->name);
             p->codec->extra_hw_frames = 4;
             break;
         }
