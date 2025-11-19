@@ -30,7 +30,7 @@ struct plplay_args {
     enum pl_log_level verbosity;
     const char *window_impl;
     const char *filename;
-    bool hwdec;
+    const char *hwdec; // Hardware decoder type (NULL = disabled, "" = auto)
     bool debug;
     bool color;
 };
