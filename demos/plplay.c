@@ -9,6 +9,7 @@
 
 #include <libavutil/cpu.h>
 #include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_vulkan.h>
 #include <libavutil/error.h>
 
 #include "common.h"
@@ -27,6 +28,7 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #endif
 
 #include <libplacebo/utils/libav.h>
+#include <libplacebo/vulkan.h>
 
 static inline void log_time(struct timing *t, double ts)
 {
@@ -149,6 +151,86 @@ static bool open_file(struct plplay *p, const char *filename)
     return true;
 }
 
+// Wrapper functions to bridge FFmpeg's lock/unlock signatures with libplacebo's
+static void vk_lock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index)
+{
+    pl_vulkan vk = (pl_vulkan)ctx->user_opaque;
+    if (vk && vk->lock_queue)
+        vk->lock_queue(vk, queue_family, index);
+}
+
+static void vk_unlock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index)
+{
+    pl_vulkan vk = (pl_vulkan)ctx->user_opaque;
+    if (vk && vk->unlock_queue)
+        vk->unlock_queue(vk, queue_family, index);
+}
+
+// Create a Vulkan hardware device context using libplacebo's Vulkan instance/device
+static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
+{
+    pl_vulkan vk = pl_vulkan_get(gpu);
+    if (!vk) {
+        fprintf(stderr, "Failed to get pl_vulkan from pl_gpu\n");
+        return NULL;
+    }
+
+    AVBufferRef *hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
+    if (!hw_device_ctx) {
+        fprintf(stderr, "Failed to allocate Vulkan hardware device context\n");
+        return NULL;
+    }
+
+    AVHWDeviceContext *device_ctx = (AVHWDeviceContext *)hw_device_ctx->data;
+    AVVulkanDeviceContext *vk_ctx = (AVVulkanDeviceContext *)device_ctx->hwctx;
+
+    // Store pl_vulkan in user_opaque for the wrapper functions
+    device_ctx->user_opaque = (void *)vk;
+
+    // Share libplacebo's Vulkan instance and device with FFmpeg
+    vk_ctx->get_proc_addr = vk->get_proc_addr;
+    vk_ctx->inst = vk->instance;
+    vk_ctx->phys_dev = vk->phys_device;
+    vk_ctx->act_dev = vk->device;
+
+    // Copy enabled device extensions from libplacebo to FFmpeg
+    // This is critical for video decode/encode extensions
+    vk_ctx->enabled_dev_extensions = vk->extensions;
+    vk_ctx->nb_enabled_dev_extensions = vk->num_extensions;
+
+    // Set up queue families - use the ones from libplacebo
+    // Note: These fields are deprecated in newer FFmpeg but still required for older versions
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    vk_ctx->queue_family_index = vk->queue_graphics.index;
+    vk_ctx->nb_graphics_queues = vk->queue_graphics.count;
+    vk_ctx->queue_family_tx_index = vk->queue_transfer.index;
+    vk_ctx->nb_tx_queues = vk->queue_transfer.count;
+    vk_ctx->queue_family_comp_index = vk->queue_compute.index;
+    vk_ctx->nb_comp_queues = vk->queue_compute.count;
+
+    // Video encode/decode queues are optional
+    vk_ctx->queue_family_encode_index = -1;
+    vk_ctx->nb_encode_queues = 0;
+    vk_ctx->queue_family_decode_index = -1;
+    vk_ctx->nb_decode_queues = 0;
+#pragma GCC diagnostic pop
+
+    // Use wrapper functions for queue locking
+    vk_ctx->lock_queue = vk_lock_queue_wrapper;
+    vk_ctx->unlock_queue = vk_unlock_queue_wrapper;
+
+    // Initialize the hardware device context
+    int ret = av_hwdevice_ctx_init(hw_device_ctx);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to initialize Vulkan hardware device context: %s\n", av_err2str(ret));
+        av_buffer_unref(&hw_device_ctx);
+        return NULL;
+    }
+
+    return hw_device_ctx;
+}
+
 static bool init_codec(struct plplay *p)
 {
     assert(p->stream);
@@ -206,9 +288,21 @@ static bool init_codec(struct plplay *p)
             const char *device_name = av_hwdevice_get_type_name(hwcfg->device_type);
             printf("Attempting to create %s hardware device context...\n", device_name);
 
-            int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
+            int ret = 0;
+            // For Vulkan, share libplacebo's instance/device to avoid conflicts
+            if (hwcfg->device_type == AV_HWDEVICE_TYPE_VULKAN) {
+                p->codec->hw_device_ctx = create_vulkan_device_ctx(p->win->gpu);
+                if (!p->codec->hw_device_ctx) {
+                    fprintf(stderr, "libavcodec: Failed creating shared Vulkan device context\n");
+                    ret = -1;
+                }
+            } else {
+                // For other hardware types, use the default method
+                ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
                                             hwcfg->device_type,
                                             NULL, NULL, 0);
+            }
+
             if (ret < 0) {
                 fprintf(stderr, "libavcodec: Failed opening HW device context for %s: %s\n",
                         device_name, av_err2str(ret));

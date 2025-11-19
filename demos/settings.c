@@ -92,7 +92,7 @@ error:
     fprintf(stderr, "  -H[type], --hwdec[=type]  Enable hardware decoding\n");
     fprintf(stderr, "                       Optional type: vulkan, vaapi, cuda, etc.\n");
     fprintf(stderr, "                       Use -Hvulkan or --hwdec=vulkan (no space for short form)\n");
-    fprintf(stderr, "                       Note: vaapi recommended for Intel/AMD, vulkan may conflict\n");
+    fprintf(stderr, "                       Note: vulkan shares GPU device with libplacebo\n");
     fprintf(stderr, "  -w, --window         Specify the windowing API\n");
     fprintf(stderr, "  -d, --debug          Enable validation layers\n");
     fprintf(stderr, "  -c, --color          Enable colored output (default: off)\n");
