@@ -84,15 +84,17 @@ bool parse_args(struct plplay_args *args, int argc, char *argv[])
     return true;
 
 error:
-    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [-H/--hwdec [<type>]] [-w/--window <api>] [-d/--debug] [-c/--color] <filename>\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-v/--verbose] [-q/--quiet] [-p/--preset <default|fast|hq|highquality>] [-H[type]/--hwdec[=type]] [-w/--window <api>] [-d/--debug] [-c/--color] <filename>\n", argv[0]);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -v, --verbose   Increase verbosity\n");
-    fprintf(stderr, "  -q, --quiet     Decrease verbosity\n");
-    fprintf(stderr, "  -p, --preset    Set the rendering preset (default|fast|hq|highquality)\n");
-    fprintf(stderr, "  -H, --hwdec [<type>]  Enable hardware decoding (optional type: vulkan, vaapi, cuda, etc.)\n");
-    fprintf(stderr, "  -w, --window    Specify the windowing API\n");
-    fprintf(stderr, "  -d, --debug     Enable validation layers\n");
-    fprintf(stderr, "  -c, --color     Enable colored output (default: off)\n");
+    fprintf(stderr, "  -v, --verbose        Increase verbosity\n");
+    fprintf(stderr, "  -q, --quiet          Decrease verbosity\n");
+    fprintf(stderr, "  -p, --preset         Set the rendering preset (default|fast|hq|highquality)\n");
+    fprintf(stderr, "  -H[type], --hwdec[=type]  Enable hardware decoding\n");
+    fprintf(stderr, "                       Optional type: vulkan, vaapi, cuda, etc.\n");
+    fprintf(stderr, "                       Use -Hvulkan or --hwdec=vulkan (no space for short form)\n");
+    fprintf(stderr, "  -w, --window         Specify the windowing API\n");
+    fprintf(stderr, "  -d, --debug          Enable validation layers\n");
+    fprintf(stderr, "  -c, --color          Enable colored output (default: off)\n");
     return false;
 }
 
