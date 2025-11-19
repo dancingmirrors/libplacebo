@@ -168,12 +168,13 @@ static void vk_unlock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queu
 
 // Find a queue family that supports the specified flags
 // Returns the queue family index and count, or -1 if not found
-static int find_queue_family(VkPhysicalDevice phys_dev, PFN_vkGetInstanceProcAddr get_proc_addr,
+static int find_queue_family(VkPhysicalDevice phys_dev, VkInstance instance,
+                             PFN_vkGetInstanceProcAddr get_proc_addr,
                              VkQueueFlags flags, uint32_t *out_count)
 {
     PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
         (PFN_vkGetPhysicalDeviceQueueFamilyProperties)
-        get_proc_addr(VK_NULL_HANDLE, "vkGetPhysicalDeviceQueueFamilyProperties");
+        get_proc_addr(instance, "vkGetPhysicalDeviceQueueFamilyProperties");
     
     if (!vkGetPhysicalDeviceQueueFamilyProperties)
         return -1;
@@ -250,7 +251,7 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     // Query and set up video encode/decode queues if available
     // VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x20, VK_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x40
     uint32_t decode_count = 0;
-    int decode_idx = find_queue_family(vk->phys_device, vk->get_proc_addr, 0x20, &decode_count);
+    int decode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x20, &decode_count);
     if (decode_idx >= 0) {
         vk_ctx->queue_family_decode_index = decode_idx;
         vk_ctx->nb_decode_queues = decode_count;
@@ -262,7 +263,7 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     }
 
     uint32_t encode_count = 0;
-    int encode_idx = find_queue_family(vk->phys_device, vk->get_proc_addr, 0x40, &encode_count);
+    int encode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x40, &encode_count);
     if (encode_idx >= 0) {
         vk_ctx->queue_family_encode_index = encode_idx;
         vk_ctx->nb_encode_queues = encode_count;
