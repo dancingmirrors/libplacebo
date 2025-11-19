@@ -670,7 +670,7 @@ int main(int argc, char *argv[])
         return -1;
 
     state.log = pl_log_create(PL_API_VER, pl_log_params(
-        .log_cb    = pl_log_color,
+        .log_cb    = state.args.color ? pl_log_color : pl_log_simple,
         .log_level = state.args.verbosity,
     ));
 
