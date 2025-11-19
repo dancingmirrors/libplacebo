@@ -19,6 +19,79 @@
 
 VK_CB_FUNC_DEF(vk_tex_deref);
 
+// Helper function to determine if a VkFormat is a multi-planar format
+// based on the format enum value (multi-planar formats have specific ranges)
+static inline bool vk_format_is_multiplanar(VkFormat fmt)
+{
+    switch (fmt) {
+    // 2-plane formats
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_444_UNORM:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM:
+        return true;
+    // 3-plane formats
+    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Get the number of planes for a multi-planar VkFormat
+static inline int vk_format_num_planes(VkFormat fmt)
+{
+    switch (fmt) {
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_444_UNORM:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM:
+        return 2;
+    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+        return 3;
+    default:
+        return 0;
+    }
+}
+
 void vk_tex_barrier(pl_gpu gpu, struct vk_cmd *cmd, pl_tex tex,
                     VkPipelineStageFlags2 stage, VkAccessFlags2 access,
                     VkImageLayout layout, uint32_t qf)
@@ -268,6 +341,10 @@ pl_tex vk_tex_create(pl_gpu gpu, const struct pl_tex_params *params)
     for (int i = 0; i < tex_vk->num_planes; i++)
         tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
     tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    PL_TRACE(gpu, "Creating texture: format=%s, num_planes=%d, aspect=0x%x, import=%d",
+             fmt->name, fmt->num_planes, (unsigned) tex_vk->aspect,
+             params->import_handle != 0);
 
     switch (pl_tex_params_dimension(*params)) {
     case 1: tex_vk->type = VK_IMAGE_TYPE_1D; break;
@@ -1332,9 +1409,39 @@ pl_tex pl_vulkan_wrap(pl_gpu gpu, const struct pl_vulkan_wrap_params *params)
     tex_vk->aspect = params->aspect;
 
     if (!tex_vk->aspect) {
+        // Auto-detect aspect mask based on format
         for (int i = 0; i < tex_vk->num_planes; i++)
             tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+        
+        // Defensive check: if the VkFormat is a multi-planar format but we didn't
+        // detect planes from pl_fmt, force the correct aspect bits based on the
+        // actual Vulkan format. This handles cases where format lookup might fail
+        // or return an incorrect single-plane format.
+        if (!tex_vk->aspect && vk_format_is_multiplanar(params->format)) {
+            int num_vk_planes = vk_format_num_planes(params->format);
+            PL_WARN(gpu, "VkFormat 0x%x is multi-planar (%d planes) but pl_fmt '%s' "
+                    "has num_planes=%d. Forcing correct aspect mask.",
+                    (unsigned) params->format, num_vk_planes, fmt->name, fmt->num_planes);
+            for (int i = 0; i < num_vk_planes; i++)
+                tex_vk->aspect |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+        }
+        
         tex_vk->aspect = PL_DEF(tex_vk->aspect, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
+    PL_TRACE(gpu, "Wrapped image %s: format=%s (VkFormat=0x%x), num_planes=%d, aspect=0x%x",
+             params->debug_tag ? params->debug_tag : "(unknown)",
+             fmt->name, (unsigned) params->format, fmt->num_planes,
+             (unsigned) tex_vk->aspect);
+
+    // Warn if we're wrapping a multi-planar Vulkan format with COLOR_BIT aspect
+    // This indicates a potential mismatch that could cause issues with some drivers
+    if (vk_format_is_multiplanar(params->format) && tex_vk->aspect == VK_IMAGE_ASPECT_COLOR_BIT) {
+        PL_ERR(gpu, "ERROR: Wrapped multi-planar VkFormat (0x%x) with VK_IMAGE_ASPECT_COLOR_BIT! "
+                "This will cause assertion failures in some Vulkan drivers (e.g., Mesa). "
+                "Format: %s, num_planes=%d, detected_vk_planes=%d",
+                (unsigned) params->format, fmt->name, fmt->num_planes,
+                vk_format_num_planes(params->format));
     }
 
     // Blitting to planar images requires fallback via compute shaders
