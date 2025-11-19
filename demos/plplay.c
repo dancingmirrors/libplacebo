@@ -254,9 +254,11 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     if (decode_idx >= 0) {
         vk_ctx->queue_family_decode_index = decode_idx;
         vk_ctx->nb_decode_queues = decode_count;
+        fprintf(stderr, "Found video decode queue family %d with %u queues\n", decode_idx, decode_count);
     } else {
         vk_ctx->queue_family_decode_index = -1;
         vk_ctx->nb_decode_queues = 0;
+        fprintf(stderr, "No video decode queue family found\n");
     }
 
     uint32_t encode_count = 0;
@@ -264,9 +266,11 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     if (encode_idx >= 0) {
         vk_ctx->queue_family_encode_index = encode_idx;
         vk_ctx->nb_encode_queues = encode_count;
+        fprintf(stderr, "Found video encode queue family %d with %u queues\n", encode_idx, encode_count);
     } else {
         vk_ctx->queue_family_encode_index = -1;
         vk_ctx->nb_encode_queues = 0;
+        fprintf(stderr, "No video encode queue family found\n");
     }
 #pragma GCC diagnostic pop
 
