@@ -166,6 +166,45 @@ static void vk_unlock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queu
         vk->unlock_queue(vk, queue_family, index);
 }
 
+// Find a queue family that supports the specified flags
+// Returns the queue family index and count, or -1 if not found
+static int find_queue_family(VkPhysicalDevice phys_dev, VkInstance instance,
+                             PFN_vkGetInstanceProcAddr get_proc_addr,
+                             VkQueueFlags flags, uint32_t *out_count)
+{
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
+        (PFN_vkGetPhysicalDeviceQueueFamilyProperties)
+        get_proc_addr(instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+    
+    if (!vkGetPhysicalDeviceQueueFamilyProperties)
+        return -1;
+
+    uint32_t qf_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(phys_dev, &qf_count, NULL);
+    
+    if (qf_count == 0)
+        return -1;
+    
+    VkQueueFamilyProperties *qf_props = calloc(qf_count, sizeof(VkQueueFamilyProperties));
+    if (!qf_props)
+        return -1;
+    
+    vkGetPhysicalDeviceQueueFamilyProperties(phys_dev, &qf_count, qf_props);
+    
+    int result = -1;
+    for (uint32_t i = 0; i < qf_count; i++) {
+        if ((qf_props[i].queueFlags & flags) == flags) {
+            result = i;
+            if (out_count)
+                *out_count = qf_props[i].queueCount;
+            break;
+        }
+    }
+    
+    free(qf_props);
+    return result;
+}
+
 // Create a Vulkan hardware device context using libplacebo's Vulkan instance/device
 static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
 {
@@ -209,11 +248,31 @@ static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
     vk_ctx->queue_family_comp_index = vk->queue_compute.index;
     vk_ctx->nb_comp_queues = vk->queue_compute.count;
 
-    // Video encode/decode queues are optional
-    vk_ctx->queue_family_encode_index = -1;
-    vk_ctx->nb_encode_queues = 0;
-    vk_ctx->queue_family_decode_index = -1;
-    vk_ctx->nb_decode_queues = 0;
+    // Query and set up video encode/decode queues if available
+    // VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x20, VK_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x40
+    uint32_t decode_count = 0;
+    int decode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x20, &decode_count);
+    if (decode_idx >= 0) {
+        vk_ctx->queue_family_decode_index = decode_idx;
+        vk_ctx->nb_decode_queues = decode_count;
+        fprintf(stderr, "Found video decode queue family %d with %u queues\n", decode_idx, decode_count);
+    } else {
+        vk_ctx->queue_family_decode_index = -1;
+        vk_ctx->nb_decode_queues = 0;
+        fprintf(stderr, "No video decode queue family found\n");
+    }
+
+    uint32_t encode_count = 0;
+    int encode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x40, &encode_count);
+    if (encode_idx >= 0) {
+        vk_ctx->queue_family_encode_index = encode_idx;
+        vk_ctx->nb_encode_queues = encode_count;
+        fprintf(stderr, "Found video encode queue family %d with %u queues\n", encode_idx, encode_count);
+    } else {
+        vk_ctx->queue_family_encode_index = -1;
+        vk_ctx->nb_encode_queues = 0;
+        fprintf(stderr, "No video encode queue family found\n");
+    }
 #pragma GCC diagnostic pop
 
     // Use wrapper functions for queue locking
