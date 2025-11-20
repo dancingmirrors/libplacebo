@@ -584,7 +584,16 @@ PL_LIBAV_API bool pl_test_pixfmt_caps(pl_gpu gpu, enum AVPixelFormat pixfmt,
 
     switch (pixfmt) {
     case AV_PIX_FMT_DRM_PRIME:
+        return gpu->import_caps.tex & PL_HANDLE_DMA_BUF;
+
     case AV_PIX_FMT_VAAPI:
+#ifdef PL_HAVE_LAV_VULKAN
+        // VAAPI hwaccel is incompatible with Vulkan GPU contexts.
+        // When using VAAPI, prefer OpenGL or other non-Vulkan backends.
+        // Vulkan cannot reliably derive DMABUFs from VAAPI frames.
+        if (pl_vulkan_get(gpu))
+            return false;
+#endif
         return gpu->import_caps.tex & PL_HANDLE_DMA_BUF;
 
 #ifdef PL_HAVE_LAV_VULKAN
