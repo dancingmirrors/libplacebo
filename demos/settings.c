@@ -234,6 +234,10 @@ void update_settings(struct plplay *p, const struct pl_frame *target)
     pl_options opts = p->opts;
     struct pl_render_params *par = &opts->params;
 
+    // Only show settings window if visibility flag is set
+    if (!p->settings_visible)
+        return;
+
     if (nk_begin(nk, "Settings", nk_rect(100, 100, 600, 600), win_flags)) {
 
         if (nk_tree_push(nk, NK_TREE_NODE, "Window settings", NK_MAXIMIZED)) {
