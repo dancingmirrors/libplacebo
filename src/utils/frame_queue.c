@@ -59,7 +59,7 @@ struct entry {
 #define THRESHOLD_FRAMES 5
 
 // Maximum number of not-yet-mapped frames to allow queueing in advance
-#define PREFETCH_FRAMES 6
+#define PREFETCH_FRAMES 2
 
 struct pool {
     float samples[MAX_SAMPLES];
