@@ -30,7 +30,9 @@ struct plplay_args {
     enum pl_log_level verbosity;
     const char *window_impl;
     const char *filename;
-    bool hwdec;
+    const char *hwdec; // Hardware decoder type (NULL = disabled, "" = auto)
+    bool debug;
+    bool color;
 };
 
 bool parse_args(struct plplay_args *args, int argc, char *argv[]);
@@ -65,6 +67,7 @@ struct plplay {
     bool ignore_dovi;
     bool toggle_fullscreen;
     bool advanced_scalers;
+    bool settings_visible;
 
     bool target_override; // if false, fields below are ignored
     struct pl_color_repr force_repr;

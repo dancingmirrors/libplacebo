@@ -19,6 +19,7 @@ struct window_params {
     // initial color space
     struct pl_swapchain_colors colors;
     bool alpha;
+    bool debug;
 };
 
 struct window *window_create(pl_log log, const struct window_params *params);
@@ -36,6 +37,7 @@ enum button {
 
 enum key {
     KEY_ESC,
+    KEY_Q,
 };
 
 void window_get_cursor(const struct window *win, int *x, int *y);

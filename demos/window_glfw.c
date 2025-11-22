@@ -49,12 +49,6 @@
 #define strdup _strdup
 #endif
 
-#ifdef NDEBUG
-#define DEBUG false
-#else
-#define DEBUG true
-#endif
-
 #define PL_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))
 
 const struct window_impl IMPL;
@@ -260,7 +254,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
     uint32_t num;
     p->vk_inst = pl_vk_inst_create(log, pl_vk_inst_params(
         .get_proc_addr = get_vk_proc_addr,
-        .debug = DEBUG,
+        .debug = params->debug,
         .extensions = glfwGetRequiredInstanceExtensions(&num),
         .num_extensions = num,
     ));
@@ -276,11 +270,27 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
         goto error;
     }
 
+    // Optional video decode/encode extensions for hardware video decoding
+    static const char *opt_video_exts[] = {
+        "VK_KHR_video_queue",
+        "VK_KHR_video_decode_queue",
+        "VK_KHR_video_decode_h264",
+        "VK_KHR_video_decode_h265",
+        "VK_KHR_video_encode_queue",
+        "VK_KHR_video_encode_h264",
+        "VK_KHR_video_encode_h265",
+    };
+
     p->vk = pl_vulkan_create(log, pl_vulkan_params(
         .instance = p->vk_inst->instance,
         .get_proc_addr = p->vk_inst->get_proc_addr,
         .surface = p->surf,
         .allow_software = true,
+        // Enable video decode/encode queue families if available
+        // VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x20, VK_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x40
+        .extra_queues = 0x20 | 0x40,
+        .opt_extensions = opt_video_exts,
+        .num_opt_extensions = PL_ARRAY_SIZE(opt_video_exts),
     ));
     if (!p->vk) {
         fprintf(stderr, "libplacebo: Failed creating vulkan device\n");
@@ -303,7 +313,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 #ifdef USE_GL
     p->gl = pl_opengl_create(log, pl_opengl_params(
         .allow_software = true,
-        .debug = DEBUG,
+        .debug = params->debug,
 #ifdef HAVE_EGL
         .egl_display = glfwGetEGLDisplay(),
         .egl_context = glfwGetEGLContext(p->win),
@@ -332,7 +342,7 @@ static struct window *glfw_create(pl_log log, const struct window_params *params
 #endif // USE_GL
 
 #ifdef USE_D3D11
-    p->d3d11 = pl_d3d11_create(log, pl_d3d11_params( .debug = DEBUG ));
+    p->d3d11 = pl_d3d11_create(log, pl_d3d11_params( .debug = params->debug ));
     if (!p->d3d11) {
         fprintf(stderr, "libplacebo: Failed creating D3D11 device\n");
         goto error;
@@ -439,6 +449,7 @@ static bool glfw_get_key(const struct window *window, enum key key)
 {
     static const int key_map[] = {
         [KEY_ESC] = GLFW_KEY_ESCAPE,
+        [KEY_Q] = GLFW_KEY_Q,
     };
 
     struct priv *p = (struct priv *) window;
