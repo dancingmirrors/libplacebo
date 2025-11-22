@@ -65,7 +65,7 @@ c_file_count=0
 while IFS= read -r file; do
     check_file "$file"
     c_file_count=$((c_file_count + 1))
-done < <(find . -name "*.c" -type f | grep -v ".git" | grep -v "^\./build")
+done < <(find . -name "*.c" -type f | grep -v ".git" | grep -v "^\./build" | grep -v "^\./3rdparty" | grep -v "^\./demos/3rdparty")
 
 echo ""
 echo "=== Checking .h header files ==="
@@ -73,7 +73,7 @@ h_file_count=0
 while IFS= read -r file; do
     check_file "$file"
     h_file_count=$((h_file_count + 1))
-done < <(find . -name "*.h" -type f | grep -v ".git" | grep -v "^\./build")
+done < <(find . -name "*.h" -type f | grep -v ".git" | grep -v "^\./build" | grep -v "^\./3rdparty" | grep -v "^\./demos/3rdparty")
 
 echo ""
 echo "=== Checking .py files ==="
@@ -81,7 +81,7 @@ py_file_count=0
 while IFS= read -r file; do
     check_file "$file"
     py_file_count=$((py_file_count + 1))
-done < <(find . -name "*.py" -type f | grep -v ".git" | grep -v "^\./build")
+done < <(find . -name "*.py" -type f | grep -v ".git" | grep -v "^\./build" | grep -v "^\./3rdparty" | grep -v "^\./demos/3rdparty")
 
 echo ""
 echo "=== Summary ==="
