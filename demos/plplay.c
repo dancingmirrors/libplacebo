@@ -8,6 +8,9 @@
 #include <stdatomic.h>
 
 #include <libavutil/cpu.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_vulkan.h>
+#include <libavutil/error.h>
 
 #include "common.h"
 #include "window.h"
@@ -25,6 +28,7 @@ static bool ui_draw(struct ui *ui, const struct pl_swapchain_frame *frame) { ret
 #endif
 
 #include <libplacebo/utils/libav.h>
+#include <libplacebo/vulkan.h>
 
 static inline void log_time(struct timing *t, double ts)
 {
@@ -147,6 +151,145 @@ static bool open_file(struct plplay *p, const char *filename)
     return true;
 }
 
+// Wrapper functions to bridge FFmpeg's lock/unlock signatures with libplacebo's
+static void vk_lock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index)
+{
+    pl_vulkan vk = (pl_vulkan)ctx->user_opaque;
+    if (vk && vk->lock_queue)
+        vk->lock_queue(vk, queue_family, index);
+}
+
+static void vk_unlock_queue_wrapper(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index)
+{
+    pl_vulkan vk = (pl_vulkan)ctx->user_opaque;
+    if (vk && vk->unlock_queue)
+        vk->unlock_queue(vk, queue_family, index);
+}
+
+// Find a queue family that supports the specified flags
+// Returns the queue family index and count, or -1 if not found
+static int find_queue_family(VkPhysicalDevice phys_dev, VkInstance instance,
+                             PFN_vkGetInstanceProcAddr get_proc_addr,
+                             VkQueueFlags flags, uint32_t *out_count)
+{
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
+        (PFN_vkGetPhysicalDeviceQueueFamilyProperties)
+        get_proc_addr(instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+
+    if (!vkGetPhysicalDeviceQueueFamilyProperties)
+        return -1;
+
+    uint32_t qf_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(phys_dev, &qf_count, NULL);
+
+    if (qf_count == 0)
+        return -1;
+
+    VkQueueFamilyProperties *qf_props = calloc(qf_count, sizeof(VkQueueFamilyProperties));
+    if (!qf_props)
+        return -1;
+
+    vkGetPhysicalDeviceQueueFamilyProperties(phys_dev, &qf_count, qf_props);
+
+    int result = -1;
+    for (uint32_t i = 0; i < qf_count; i++) {
+        if ((qf_props[i].queueFlags & flags) == flags) {
+            result = i;
+            if (out_count)
+                *out_count = qf_props[i].queueCount;
+            break;
+        }
+    }
+
+    free(qf_props);
+    return result;
+}
+
+// Create a Vulkan hardware device context using libplacebo's Vulkan instance/device
+static AVBufferRef *create_vulkan_device_ctx(pl_gpu gpu)
+{
+    pl_vulkan vk = pl_vulkan_get(gpu);
+    if (!vk) {
+        fprintf(stderr, "Failed to get pl_vulkan from pl_gpu\n");
+        return NULL;
+    }
+
+    AVBufferRef *hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
+    if (!hw_device_ctx) {
+        fprintf(stderr, "Failed to allocate Vulkan hardware device context\n");
+        return NULL;
+    }
+
+    AVHWDeviceContext *device_ctx = (AVHWDeviceContext *)hw_device_ctx->data;
+    AVVulkanDeviceContext *vk_ctx = (AVVulkanDeviceContext *)device_ctx->hwctx;
+
+    // Store pl_vulkan in user_opaque for the wrapper functions
+    device_ctx->user_opaque = (void *)vk;
+
+    // Share libplacebo's Vulkan instance and device with FFmpeg
+    vk_ctx->get_proc_addr = vk->get_proc_addr;
+    vk_ctx->inst = vk->instance;
+    vk_ctx->phys_dev = vk->phys_device;
+    vk_ctx->act_dev = vk->device;
+
+    // Copy enabled device extensions from libplacebo to FFmpeg
+    // This is critical for video decode/encode extensions
+    vk_ctx->enabled_dev_extensions = vk->extensions;
+    vk_ctx->nb_enabled_dev_extensions = vk->num_extensions;
+
+    // Set up queue families - use the ones from libplacebo
+    // Note: These fields are deprecated in newer FFmpeg but still required for older versions
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    vk_ctx->queue_family_index = vk->queue_graphics.index;
+    vk_ctx->nb_graphics_queues = vk->queue_graphics.count;
+    vk_ctx->queue_family_tx_index = vk->queue_transfer.index;
+    vk_ctx->nb_tx_queues = vk->queue_transfer.count;
+    vk_ctx->queue_family_comp_index = vk->queue_compute.index;
+    vk_ctx->nb_comp_queues = vk->queue_compute.count;
+
+    // Query and set up video encode/decode queues if available
+    // VK_QUEUE_VIDEO_DECODE_BIT_KHR = 0x20, VK_QUEUE_VIDEO_ENCODE_BIT_KHR = 0x40
+    uint32_t decode_count = 0;
+    int decode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x20, &decode_count);
+    if (decode_idx >= 0) {
+        vk_ctx->queue_family_decode_index = decode_idx;
+        vk_ctx->nb_decode_queues = decode_count;
+        fprintf(stderr, "Found video decode queue family %d with %u queues\n", decode_idx, decode_count);
+    } else {
+        vk_ctx->queue_family_decode_index = -1;
+        vk_ctx->nb_decode_queues = 0;
+        fprintf(stderr, "No video decode queue family found\n");
+    }
+
+    uint32_t encode_count = 0;
+    int encode_idx = find_queue_family(vk->phys_device, vk->instance, vk->get_proc_addr, 0x40, &encode_count);
+    if (encode_idx >= 0) {
+        vk_ctx->queue_family_encode_index = encode_idx;
+        vk_ctx->nb_encode_queues = encode_count;
+        fprintf(stderr, "Found video encode queue family %d with %u queues\n", encode_idx, encode_count);
+    } else {
+        vk_ctx->queue_family_encode_index = -1;
+        vk_ctx->nb_encode_queues = 0;
+        fprintf(stderr, "No video encode queue family found\n");
+    }
+#pragma GCC diagnostic pop
+
+    // Use wrapper functions for queue locking
+    vk_ctx->lock_queue = vk_lock_queue_wrapper;
+    vk_ctx->unlock_queue = vk_unlock_queue_wrapper;
+
+    // Initialize the hardware device context
+    int ret = av_hwdevice_ctx_init(hw_device_ctx);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to initialize Vulkan hardware device context: %s\n", av_err2str(ret));
+        av_buffer_unref(&hw_device_ctx);
+        return NULL;
+    }
+
+    return hw_device_ctx;
+}
+
 static bool init_codec(struct plplay *p)
 {
     assert(p->stream);
@@ -173,24 +316,70 @@ static bool init_codec(struct plplay *p)
 
     const AVCodecHWConfig *hwcfg = 0;
     if (p->args.hwdec) {
+        enum AVHWDeviceType requested_type = AV_HWDEVICE_TYPE_NONE;
+
+        // If a specific hwdec type is requested, parse it
+        if (p->args.hwdec[0] != '\0') {
+            requested_type = av_hwdevice_find_type_by_name(p->args.hwdec);
+            if (requested_type == AV_HWDEVICE_TYPE_NONE) {
+                fprintf(stderr, "Unknown hwdec type '%s'\n", p->args.hwdec);
+                fprintf(stderr, "Available types:");
+                enum AVHWDeviceType type = AV_HWDEVICE_TYPE_NONE;
+                while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+                    fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
+                fprintf(stderr, "\n");
+                return false;
+            }
+            printf("Requesting hardware decoder: %s\n", p->args.hwdec);
+        }
+
         for (int i = 0; (hwcfg = avcodec_get_hw_config(codec, i)); i++) {
             if (!pl_test_pixfmt(p->win->gpu, hwcfg->pix_fmt))
                 continue;
             if (!(hwcfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX))
                 continue;
 
-            int ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
+            // If a specific type was requested, only try that type
+            if (requested_type != AV_HWDEVICE_TYPE_NONE &&
+                hwcfg->device_type != requested_type)
+                continue;
+
+            const char *device_name = av_hwdevice_get_type_name(hwcfg->device_type);
+            printf("Attempting to create %s hardware device context...\n", device_name);
+
+            int ret = 0;
+            // For Vulkan, share libplacebo's instance/device to avoid conflicts
+            if (hwcfg->device_type == AV_HWDEVICE_TYPE_VULKAN) {
+                p->codec->hw_device_ctx = create_vulkan_device_ctx(p->win->gpu);
+                if (!p->codec->hw_device_ctx) {
+                    fprintf(stderr, "libavcodec: Failed creating shared Vulkan device context\n");
+                    ret = -1;
+                }
+            } else {
+                // For other hardware types, use the default method
+                ret = av_hwdevice_ctx_create(&p->codec->hw_device_ctx,
                                             hwcfg->device_type,
                                             NULL, NULL, 0);
+            }
+
             if (ret < 0) {
-                fprintf(stderr, "libavcodec: Failed opening HW device context, skipping\n");
+                fprintf(stderr, "libavcodec: Failed opening HW device context for %s: %s\n",
+                        device_name, av_err2str(ret));
                 continue;
             }
 
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwcfg->pix_fmt);
-            printf("Using hardware frame format: %s\n", desc->name);
+            printf("Successfully created hardware decoder: %s (%s)\n",
+                   device_name, desc->name);
             p->codec->extra_hw_frames = 4;
             break;
+        }
+
+        // If a specific type was requested but not found, it's an error
+        if (!hwcfg && requested_type != AV_HWDEVICE_TYPE_NONE) {
+            fprintf(stderr, "Requested hwdec type '%s' not available for this codec\n",
+                    p->args.hwdec);
+            return false;
         }
     }
 
@@ -510,10 +699,21 @@ static bool render_loop(struct plplay *p)
     window_poll(p->win, false);
 
     double pts_target = 0.0, prev_pts = 0.0;
+    bool prev_esc_state = false; // Track previous ESC key state for toggle detection
 
     while (!p->win->window_lost) {
-        if (window_get_key(p->win, KEY_ESC))
+        // Toggle settings visibility when ESC is pressed (not held)
+        bool esc_pressed = window_get_key(p->win, KEY_ESC);
+        if (esc_pressed && !prev_esc_state) {
+            p->settings_visible = !p->settings_visible;
+        }
+        prev_esc_state = esc_pressed;
+
+        // Quit when 'q' is pressed
+        if (window_get_key(p->win, KEY_Q)) {
+            p->win->window_lost = true;
             break;
+        }
 
         if (p->toggle_fullscreen)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
@@ -660,6 +860,7 @@ int main(int argc, char *argv[])
         .target_override = true,
         .use_icc_luma = true,
         .fps = 60.0,
+        .settings_visible = false, // Settings hidden by default
         .args = {
             .preset = &pl_render_default_params,
             .verbosity = PL_LOG_INFO,
@@ -670,7 +871,7 @@ int main(int argc, char *argv[])
         return -1;
 
     state.log = pl_log_create(PL_API_VER, pl_log_params(
-        .log_cb    = pl_log_color,
+        .log_cb    = state.args.color ? pl_log_color : pl_log_simple,
         .log_level = state.args.verbosity,
     ));
 
@@ -702,6 +903,7 @@ int main(int argc, char *argv[])
         .width = par->width,
         .height = par->height,
         .forced_impl = state.args.window_impl,
+        .debug = state.args.debug,
     };
 
     if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
