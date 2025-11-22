@@ -699,10 +699,15 @@ static bool render_loop(struct plplay *p)
     window_poll(p->win, false);
 
     double pts_target = 0.0, prev_pts = 0.0;
+    bool prev_esc_state = false; // Track previous ESC key state for toggle detection
 
     while (!p->win->window_lost) {
-        if (window_get_key(p->win, KEY_ESC))
-            break;
+        // Toggle settings visibility when ESC is pressed (not held)
+        bool esc_pressed = window_get_key(p->win, KEY_ESC);
+        if (esc_pressed && !prev_esc_state) {
+            p->settings_visible = !p->settings_visible;
+        }
+        prev_esc_state = esc_pressed;
 
         if (p->toggle_fullscreen)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
@@ -849,6 +854,7 @@ int main(int argc, char *argv[])
         .target_override = true,
         .use_icc_luma = true,
         .fps = 60.0,
+        .settings_visible = false, // Settings hidden by default
         .args = {
             .preset = &pl_render_default_params,
             .verbosity = PL_LOG_INFO,

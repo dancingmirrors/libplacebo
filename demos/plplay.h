@@ -67,6 +67,7 @@ struct plplay {
     bool ignore_dovi;
     bool toggle_fullscreen;
     bool advanced_scalers;
+    bool settings_visible;
 
     bool target_override; // if false, fields below are ignored
     struct pl_color_repr force_repr;
