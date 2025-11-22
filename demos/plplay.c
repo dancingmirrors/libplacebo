@@ -709,6 +709,12 @@ static bool render_loop(struct plplay *p)
         }
         prev_esc_state = esc_pressed;
 
+        // Quit when 'q' is pressed
+        if (window_get_key(p->win, KEY_Q)) {
+            p->win->window_lost = true;
+            break;
+        }
+
         if (p->toggle_fullscreen)
             window_toggle_fullscreen(p->win, !window_is_fullscreen(p->win));
 
